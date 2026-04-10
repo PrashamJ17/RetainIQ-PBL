@@ -1,0 +1,47 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+async function fetchAPI(endpoint) {
+  const res = await fetch(`${API_BASE}${endpoint}`, { cache: "no-store" });
+  if (!res.ok) {
+    if (res.status === 503) return null; // Model not trained yet
+    throw new Error(`API error: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getStatus() {
+  return fetchAPI("/api/status");
+}
+
+export async function triggerTraining() {
+  const res = await fetch(`${API_BASE}/api/trigger-training`, { method: "POST" });
+  return res.json();
+}
+
+export async function getDashboardStats() {
+  return fetchAPI("/api/dashboard/stats");
+}
+
+export async function getSegments() {
+  return fetchAPI("/api/segments");
+}
+
+export async function getChurnRisk() {
+  return fetchAPI("/api/churn-risk");
+}
+
+export async function getActionMatrix() {
+  return fetchAPI("/api/action-matrix");
+}
+
+export async function getCLV() {
+  return fetchAPI("/api/clv");
+}
+
+export async function getActivations() {
+  return fetchAPI("/api/activations");
+}
+
+export async function getExport(actionKey) {
+  return fetchAPI(`/api/export/${actionKey}`);
+}
