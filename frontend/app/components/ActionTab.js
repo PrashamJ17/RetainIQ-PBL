@@ -21,9 +21,11 @@ export default function ActionTab({ data }) {
   const scatterByAction = {};
   scatter_data?.forEach(d => {
     if (!scatterByAction[d.action]) scatterByAction[d.action] = [];
-    if (scatterByAction[d.action].length < 400) {
+    // Lower sample size strictly to 120 per category so distinct dots are visible rather than a solid line
+    if (scatterByAction[d.action].length < 120) {
       scatterByAction[d.action].push({
-        x: d.monetary,
+        x: Math.min(d.monetary, 2000), // Cap at 2000 to prevent extreme compression
+        actual_x: d.monetary,
         y: d.churn_probability,
         id: d.customer_unique_id?.substring(0, 8),
         segment: d.segment,
@@ -37,7 +39,7 @@ export default function ActionTab({ data }) {
       return (
         <div className="glass-card p-3 text-sm" style={{ border: "1px solid var(--glass-border)" }}>
           <p className="font-mono">{d?.id}...</p>
-          <p>Monetary: R${d?.x?.toFixed(2)}</p>
+          <p>Monetary: R${(d?.actual_x || d?.x)?.toFixed(2)}</p>
           <p>Churn Risk: {(d?.y * 100).toFixed(1)}%</p>
           <p>Segment: {d?.segment}</p>
         </div>
@@ -75,19 +77,20 @@ export default function ActionTab({ data }) {
           Customer Value vs. Churn Risk Quadrant
         </h3>
         <ResponsiveContainer width="100%" height={500}>
-          <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
+          <ScatterChart margin={{ top: 40, right: 30, bottom: 40, left: 20 }}>
             <XAxis type="number" dataKey="x" name="Monetary" stroke="var(--text-secondary)"
-                   fontSize={12} label={{ value: "Monetary Value (R$)", position: "bottom", fill: "var(--text-secondary)" }}
-                   domain={[0, 'auto']} />
-            <YAxis type="number" dataKey="y" name="Churn Probability" stroke="var(--text-secondary)"
-                   fontSize={12} label={{ value: "Churn Probability", angle: -90, position: "insideLeft", fill: "var(--text-secondary)" }}
-                   domain={[0, 1]} />
+                   fontSize={12} label={{ value: "Monetary Value (R$)", position: "bottom", offset: 15, fill: "var(--text-secondary)" }}
+                   domain={[0, 2000]} />
+            <YAxis type="number" dataKey="y" name="Churn Risk" stroke="var(--text-secondary)"
+                   fontSize={12} label={{ value: "Churn Probability", angle: -90, position: "insideLeft", offset: -5, fill: "var(--text-secondary)" }}
+                   domain={[-0.05, 1.05]} />
             <Tooltip content={<CustomTooltip />} />
+            <Legend verticalAlign="top" height={36} wrapperStyle={{ top: -10 }} />
             {Object.entries(scatterByAction).map(([action, points]) => (
               <Scatter key={action} name={ACTION_CONFIG[action]?.label || action}
-                       data={points} fill={ACTION_CONFIG[action]?.color || "#888"} opacity={0.6} />
+                       data={points} fill={ACTION_CONFIG[action]?.color || "#888"} 
+                       opacity={0.85} stroke="rgba(255, 255, 255, 0.2)" strokeWidth={1} />
             ))}
-            <Legend />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
