@@ -125,17 +125,6 @@ The backend calculates RFM, triggers the XGBoost pipeline, calculates lifetime v
 - **Uplift Modeling:** Upgrading from standard Churn prediction to Causal Inference models to determine if a marketing intervention will *actually* alter a customer's behavior (avoiding 'Sleeping Dogs').
 - **Transformer Sequence Models:** Transitioning from tabular machine learning to deep learning sequence models like LSTMs to track chronological user journeys over time.
 
-## Contributing Guidelines
-Contributions are welcome! If you're looking to improve the architecture or expand the ML pipeline:
-1. Fork the repository.
-2. Create a new feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request detailing the changes.
-
-## License
-Distributed under the MIT License. See `LICENSE` for more information.
-
 ## Author / Contact
 **Prasham Jain**  
 [GitHub Profile](https://github.com/PrashamJ17) | [LinkedIn](https://www.linkedin.com/in/prasham-jain-774652314/)
