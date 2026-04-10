@@ -1,5 +1,9 @@
 # 🧠 RetainIQ: Enterprise Customer Retention Engine
 
+## 🚀 Live Deployment
+- **Frontend Dashboard:** [https://retain-iq-pbl.vercel.app/](https://retain-iq-pbl.vercel.app/)
+- **Backend API (Swagger):** [https://retainiq-pbl.onrender.com/docs](https://retainiq-pbl.onrender.com/docs)
+
 ## Description
 RetainIQ is a production-ready, microservices-based SaaS analytics platform designed to reverse customer churn before it happens. By ingesting raw e-commerce transaction data, RetainIQ leverages advanced Machine Learning to transform logs into instantly actionable marketing insights. 
 
@@ -127,7 +131,7 @@ The backend calculates RFM, triggers the XGBoost pipeline, calculates lifetime v
 
 ## Author / Contact
 **Prasham Jain**  
-[GitHub Profile](https://github.com/PrashamJ17) | [LinkedIn](https://www.linkedin.com/in/prasham-jain-774652314/)
+[GitHub Profile](https://github.com/PrashamJ17)
 
 ## Mentor 
 **Dr Rishi Gupta**
