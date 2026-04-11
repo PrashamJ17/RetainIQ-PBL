@@ -31,20 +31,13 @@ export default function Dashboard() {
   // Fetch API status
   const fetchStatus = useCallback(async () => {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000); // 60s for Render cold start
-      const res = await fetch(`${API_BASE}/api/status`, { signal: controller.signal });
-      clearTimeout(timeout);
+      const res = await fetch(`${API_BASE}/api/status`);
       const json = await res.json();
       setStatus(json);
       setError(null);
       return json;
     } catch (e) {
-      if (e.name === "AbortError") {
-        setError("Backend is taking too long to respond. Render may be cold-starting — please wait and retry.");
-      } else {
-        setError("Cannot connect to API. Check that NEXT_PUBLIC_API_URL is set correctly on Vercel.");
-      }
+      setError("Cannot connect to API. Is the FastAPI server running on port 8000?");
       return null;
     }
   }, []);
@@ -138,7 +131,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <LoadingState message="Connecting to RetainIQ API... (may take ~30s if backend is cold-starting)" />
+        <LoadingState message="Connecting to RetainIQ API..." />
       </div>
     );
   }
