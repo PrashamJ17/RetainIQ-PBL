@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { exportFilteredCustomers } from "../lib/api";
 import { SectionTitle, MetricCard } from "./ui";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -10,6 +12,53 @@ export default function ChurnTab({ data }) {
   if (!data) return null;
 
   const { metrics, feature_importance, top_high_risk_users, churn_distribution } = data;
+
+  const [exporting, setExporting] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("CHURNED");
+  const [filterSegment, setFilterSegment] = useState("ALL");
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await exportFilteredCustomers(filterStatus, filterSegment);
+      if (!res || !res.customers || res.customers.length === 0) {
+        alert("No customers found for these filters.");
+        setExporting(false);
+        return;
+      }
+      
+      const exportData = res.customers;
+      const headers = Object.keys(exportData[0]);
+      const csvRows = [];
+      
+      // Header row
+      csvRows.push(headers.join(","));
+      
+      // Data rows
+      for (const row of exportData) {
+        const values = headers.map(h => {
+          const val = row[h] !== null && row[h] !== undefined ? row[h] : "";
+          return `"${String(val).replace(/"/g, '""')}"`;
+        });
+        csvRows.push(values.join(","));
+      }
+      
+      const csvString = csvRows.join("\n");
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.setAttribute("hidden", "");
+      a.setAttribute("href", url);
+      a.setAttribute("download", `customers_${filterStatus.toLowerCase()}_${filterSegment.toLowerCase()}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to export data.");
+    }
+    setExporting(false);
+  };
 
   const fiData = feature_importance?.slice(0, 10).map(f => ({
     feature: f.feature.replace(/_/g, " "),
@@ -38,6 +87,49 @@ export default function ChurnTab({ data }) {
       <SectionTitle subtitle="XGBoost predictions with SHAP explainability">
         ⚠️ Churn Risk Analysis
       </SectionTitle>
+
+      {/* CSV Export Panel */}
+      <div className="glass-card p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(145deg, rgba(108,99,255,0.05), rgba(0,201,167,0.05))" }}>
+        <div>
+          <h3 className="text-lg font-bold gradient-text mb-1">Customer Data Export</h3>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Download raw customer data with ML predictions for offline analysis</p>
+        </div>
+        
+        <div className="flex flex-col md:flex-row items-center gap-4">
+          <select 
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm bg-transparent border focus:outline-none"
+            style={{ borderColor: "var(--border-subtle)", color: "var(--text-primary)" }}
+          >
+            <option value="ALL" style={{background: "#1a1a2e"}}>All Statuses</option>
+            <option value="CHURNED" style={{background: "#1a1a2e"}}>Predicted Churned</option>
+            <option value="RETAINED" style={{background: "#1a1a2e"}}>Predicted Retained</option>
+          </select>
+
+          <select 
+            value={filterSegment}
+            onChange={(e) => setFilterSegment(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm bg-transparent border focus:outline-none"
+            style={{ borderColor: "var(--border-subtle)", color: "var(--text-primary)" }}
+          >
+            <option value="ALL" style={{background: "#1a1a2e"}}>All Segments</option>
+            <option value="Champions" style={{background: "#1a1a2e"}}>Champions</option>
+            <option value="Loyal" style={{background: "#1a1a2e"}}>Loyal</option>
+            <option value="At-Risk" style={{background: "#1a1a2e"}}>At-Risk</option>
+            <option value="Hibernating" style={{background: "#1a1a2e"}}>Hibernating</option>
+          </select>
+          
+          <button 
+            onClick={handleExport}
+            disabled={exporting}
+            className={`px-4 py-2 rounded-xl text-sm font-bold text-white transition-all ${exporting ? "opacity-50 cursor-not-allowed" : "hover:scale-105"}`}
+            style={{ background: "var(--accent-primary)", boxShadow: "0 4px 14px 0 rgba(108, 99, 255, 0.39)" }}
+          >
+            {exporting ? "⏳ Exporting..." : "📥 Download CSV"}
+          </button>
+        </div>
+      </div>
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">

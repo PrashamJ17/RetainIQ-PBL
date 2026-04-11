@@ -47,3 +47,10 @@ export async function getActivations() {
 export async function getExport(actionKey) {
   return fetchAPI(`/api/export/${actionKey}`);
 }
+
+export async function exportFilteredCustomers(status = "ALL", segment = "ALL") {
+  const params = new URLSearchParams();
+  if (status) params.append("status", status);
+  if (segment) params.append("segment", segment);
+  return fetchAPI(`/api/export-customers?${params.toString()}`);
+}

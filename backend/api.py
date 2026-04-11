@@ -305,6 +305,47 @@ def export_action_list(action_key: str):
     }
 
 
+@router.get("/export-customers")
+def export_filtered_customers(status: Optional[str] = "ALL", segment: Optional[str] = "ALL"):
+    """
+    Export a filtered customer list specifically built for CSV download on the frontend.
+    Filters by churn status and customer segment.
+    """
+    if _ml_state["customer_df"] is None:
+        raise HTTPException(status_code=503, detail="Model not yet trained.")
+
+    df = _ml_state["customer_df"]
+
+    # Apply Churn Status Filter
+    if status.upper() == "CHURNED":
+        df = df[df["churn_prediction"] == 1]
+    elif status.upper() == "RETAINED":
+        df = df[df["churn_prediction"] == 0]
+
+    # Apply Segment Filter
+    if segment.upper() != "ALL":
+        df = df[df["segment"].str.upper() == segment.upper()]
+
+    # Select columns useful for offline analysis
+    export_cols = [
+        "customer_unique_id", "segment", "churned", "churn_prediction", "churn_probability",
+        "action", "predicted_clv", "clv_tier", "monetary", "frequency", "recency",
+        "avg_review_score", "avg_delivery_delay"
+    ]
+
+    # Handle case where certain columns might not exist if pipeline failed midway
+    available_cols = [col for col in export_cols if col in df.columns]
+
+    export_data = df[available_cols].sort_values("churn_probability", ascending=False).to_dict(orient="records")
+
+    return {
+        "status_filter": status,
+        "segment_filter": segment,
+        "count": len(export_data),
+        "customers": export_data
+    }
+
+
 # ──────────────────────────────────────────────
 # DB-BACKED ROUTES (from ingestion layer)
 # ──────────────────────────────────────────────
