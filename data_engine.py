@@ -165,39 +165,38 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ──────────────────────────────────────────────
-# 3. FEATURE ENGINEERING (Customer-Level)
+# 3. FEATURE & TARGET ENGINEERING (Time-Based Split)
 # ──────────────────────────────────────────────
 
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+def engineer_features_and_labels(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Aggregate order-level data to the CUSTOMER level and compute
-    features for segmentation and churn prediction.
-
-    Features computed:
-        - Recency: Days since last purchase (from dataset's max date)
-        - Frequency: Number of unique orders
-        - Monetary: Total spend
-        - AvgOrderValue: Mean spend per order
-        - AvgReviewScore: Mean review score given
-        - TotalItems: Total items purchased
-        - UniqueCategories: Number of distinct product categories bought
-        - AvgDeliveryDelay: Mean delivery delay in days
-        - PurchaseSpanDays: Days between first and last purchase
-        - AvgDaysBetweenPurchases: Average gap between consecutive purchases
-
-    Returns:
-        pd.DataFrame: Customer-level feature matrix.
+    Implements a rigorous Time-Based Out-Of-Time (OOT) Validation Split to prevent target leakage.
+    
+    Instead of using the entire dataset to calculate features AND labels concurrently, we split 
+    the data temporally at a 'cutoff_date' (90 days before the maximum date in the dataset).
+    
+    Features (RFM + behavior): Computed strictly on orders BEFORE the cutoff date.
+    Target (Churn + CLV): Computed strictly by observing behavior AFTER the cutoff date.
+    This ensures models learn to forecast the future, rather than cheating by observing it.
     """
     df = df.copy()
 
-    # Reference date: one day after the latest order in the dataset
-    reference_date = df["order_purchase_timestamp"].max() + pd.Timedelta(days=1)
+    # Define the 90-day prediction cutoff threshold
+    max_date = df["order_purchase_timestamp"].max()
+    reference_date = max_date + pd.Timedelta(days=1)
+    cutoff_date = reference_date - pd.Timedelta(days=90)
+    
+    # === SPLIT 1: FEATURE WINDOW (Historical data) ===
+    feature_df = df[df["order_purchase_timestamp"] < cutoff_date].copy()
+    
+    # === SPLIT 2: TARGET WINDOW (Future behaviors) ===
+    target_df = df[df["order_purchase_timestamp"] >= cutoff_date].copy()
 
-    # Group by unique customer ID
+    # 1. Compute Features (using only Feature Window)
     customer_df = (
-        df.groupby("customer_unique_id")
+        feature_df.groupby("customer_unique_id")
         .agg(
-            recency=("order_purchase_timestamp", lambda x: (reference_date - x.max()).days),
+            recency=("order_purchase_timestamp", lambda x: (cutoff_date - x.max()).days),
             frequency=("order_id", "nunique"),
             monetary=("total_payment", "sum"),
             avg_order_value=("total_payment", "mean"),
@@ -207,54 +206,46 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
             avg_delivery_delay=("delivery_delay_days", "mean"),
             first_purchase=("order_purchase_timestamp", "min"),
             last_purchase=("order_purchase_timestamp", "max"),
-            n_orders=("order_id", "nunique"),
         )
         .reset_index()
     )
 
-    # Purchase span: days between first and last purchase
+    # Calculate relational temporal features
     customer_df["purchase_span_days"] = (
         customer_df["last_purchase"] - customer_df["first_purchase"]
     ).dt.days
 
-    # Average days between purchases (for repeat buyers)
     customer_df["avg_days_between_purchases"] = np.where(
         customer_df["frequency"] > 1,
         customer_df["purchase_span_days"] / (customer_df["frequency"] - 1),
         0,
     )
-
-    # Drop intermediate date columns
     customer_df = customer_df.drop(columns=["first_purchase", "last_purchase"])
 
-    # Round numeric columns for readability
+    # 2. Compute Targets (using only Target Window)
+    future_behaviors = target_df.groupby("customer_unique_id").agg(
+        target_purchases=("order_id", "nunique"),
+        target_revenue=("total_payment", "sum")
+    ).reset_index()
+
+    # Merge historical traits with future outcomes
+    customer_df = customer_df.merge(future_behaviors, on="customer_unique_id", how="left")
+    
+    # Fill NaN for users who made NO purchases in the target window (i.e. they churned)
+    customer_df["target_purchases"] = customer_df["target_purchases"].fillna(0)
+    customer_df["target_revenue"] = customer_df["target_revenue"].fillna(0)
+    
+    # DEFINING THE TRUE TARGETS:
+    # Churn Label: 1 if ZERO purchases in target window, else 0 (Leakage resolved)
+    customer_df["churned"] = (customer_df["target_purchases"] == 0).astype(int)
+    
+    # CLV Target: Exact continuous revenue generated in the target window
+    customer_df["clv_target"] = customer_df["target_revenue"]
+
+    # Round numerics
     numeric_cols = customer_df.select_dtypes(include=[np.number]).columns
     customer_df[numeric_cols] = customer_df[numeric_cols].round(2)
 
-    return customer_df
-
-
-# ──────────────────────────────────────────────
-# 4. CHURN LABEL DEFINITION
-# ──────────────────────────────────────────────
-
-def define_churn_label(customer_df: pd.DataFrame, threshold_days: int = CHURN_THRESHOLD_DAYS) -> pd.DataFrame:
-    """
-    Define the binary churn label.
-
-    A customer is considered "churned" if their Recency exceeds the threshold.
-    This means they haven't purchased in the last `threshold_days` days
-    relative to the dataset's latest date.
-
-    Args:
-        customer_df: Customer-level DataFrame with a 'recency' column.
-        threshold_days: Number of days of inactivity to classify as churned.
-
-    Returns:
-        pd.DataFrame: Same DataFrame with an added 'churned' column (0 or 1).
-    """
-    customer_df = customer_df.copy()
-    customer_df["churned"] = (customer_df["recency"] > threshold_days).astype(int)
     return customer_df
 
 
@@ -286,14 +277,12 @@ def run_data_pipeline(data_dir: str = "data") -> pd.DataFrame:
     clean_df = clean_data(raw_df)
     print(f"   → {len(clean_df):,} valid delivered orders after cleaning")
 
-    print("⚙️  Engineering customer-level features...")
-    customer_df = engineer_features(clean_df)
-    print(f"   → {len(customer_df):,} unique customers")
+    print("⚙️  Engineering features & Time-Based Split Target Variables...")
+    customer_df = engineer_features_and_labels(clean_df)
+    print(f"   → {len(customer_df):,} targetable customers")
 
-    print("🏷️  Defining churn labels (threshold={} days)...".format(CHURN_THRESHOLD_DAYS))
-    customer_df = define_churn_label(customer_df)
     churn_rate = customer_df["churned"].mean() * 100
-    print(f"   → Churn rate: {churn_rate:.1f}%")
+    print(f"   → Strict Time-split Churn rate: {churn_rate:.1f}%")
 
     print("✅ Data pipeline complete!")
     return customer_df

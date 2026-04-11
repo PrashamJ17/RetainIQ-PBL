@@ -37,41 +37,17 @@ from utils import TEST_SIZE, RANDOM_STATE
 
 def engineer_clv_target(customer_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Create the CLV target variable.
-
-    Strategy: Use a customer's historical monetary value as a proxy for
-    future CLV. In a production system with multi-year data, we would
-    use a forward-looking window (e.g., next 12 months of actual spend).
-
-    For the Olist dataset (single-snapshot), we use a weighted formula:
-        CLV = monetary * frequency_factor * recency_decay
-
-    This creates a continuous target that rewards:
-        - Higher total spend (monetary)
-        - Repeat purchases (frequency bonus)
-        - Recent activity (recency decay — stale customers worth less)
+    (DEPRECATED) 
+    Previously used a mathematical formula for CLV.
+    Now, the target 'clv_target' is generated directly in the data_engine
+    using a pure Time-Based Out-Of-Time (OOT) Split.
+    
+    The model now predicts the ACTUAL revenue generated in the target window,
+    rather than a heuristic formula.
     """
-    df = customer_df.copy()
-
-    # Frequency bonus: repeat buyers are worth more
-    # 1 purchase = 1.0x, 2 = 1.3x, 3 = 1.5x, etc. (diminishing returns)
-    df["frequency_factor"] = 1 + np.log1p(df["frequency"] - 1) * 0.5
-
-    # Recency decay: customers who haven't bought recently are worth less
-    # Recent (0-30 days) = 1.0x decay, 90 days = 0.7x, 365+ days = 0.3x
-    max_recency = df["recency"].max()
-    df["recency_decay"] = 1.0 - (df["recency"] / max_recency) * 0.7
-    df["recency_decay"] = df["recency_decay"].clip(lower=0.3)
-
-    # CLV target
-    df["clv_target"] = (
-        df["monetary"] * df["frequency_factor"] * df["recency_decay"]
-    ).round(2)
-
-    # Clean up intermediate columns
-    df = df.drop(columns=["frequency_factor", "recency_decay"])
-
-    return df
+    return customer_df
+    # Function maintained to prevent breaking API signatures, but does nothing.
+    return customer_df
 
 
 # ──────────────────────────────────────────────
@@ -231,8 +207,9 @@ def run_clv_pipeline(customer_df: pd.DataFrame) -> dict:
     Returns:
         Dict with model, metrics, updated customer_df with clv columns
     """
-    print("💰 Engineering CLV target variable...")
-    customer_df = engineer_clv_target(customer_df)
+    print("💰 Preparing CLV targets (provided by Time-Based Split engine)...")
+    # Target already engineered by data_engine.py
+    # customer_df = engineer_clv_target(customer_df)
 
     print("🔧 Preparing CLV features...")
     splits = prepare_clv_features(customer_df)

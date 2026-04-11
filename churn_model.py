@@ -27,6 +27,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
+from sklearn.linear_model import LogisticRegression
+from sklearn.dummy import DummyClassifier
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
@@ -182,14 +184,49 @@ def get_model_metrics(
     metrics = {
         "accuracy": round(accuracy_score(y_test, y_pred), 4),
         "f1_score": round(f1_score(y_test, y_pred), 4),
-        "precision": round(precision_score(y_test, y_pred), 4),
-        "recall": round(recall_score(y_test, y_pred), 4),
-        "roc_auc": round(roc_auc_score(y_test, y_proba), 4),
+        "precision": round(precision_score(y_test, y_pred, zero_division=0), 4),
+        "recall": round(recall_score(y_test, y_pred, zero_division=0), 4),
+        "roc_auc": round(roc_auc_score(y_test, y_proba), 4) if len(np.unique(y_test)) > 1 else 0.5,
         "confusion_matrix": confusion_matrix(y_test, y_pred).tolist(),
-        "classification_report": classification_report(y_test, y_pred, output_dict=True),
+        "classification_report": classification_report(y_test, y_pred, output_dict=True, zero_division=0),
     }
 
     return metrics
+
+
+# ──────────────────────────────────────────────
+# 4.5 ERROR ANALYSIS (For Academic Report)
+# ──────────────────────────────────────────────
+
+def perform_error_analysis(model: xgb.XGBClassifier, X_test: pd.DataFrame, y_test: pd.Series):
+    """
+    Analyzes False Positives (predicted churn, actually retained) 
+    and False Negatives (predicted retained, actually churned)
+    to provide qualitative insights for the final report.
+    """
+    y_pred = model.predict(X_test)
+    
+    # False Positives: Model said they would churn, but they DID buy again.
+    # False Negatives: Model said they would stay, but they NEVER bought again.
+    
+    fn_mask = (y_test == 1) & (y_pred == 0)
+    fp_mask = (y_test == 0) & (y_pred == 1)
+    
+    X_fn = X_test[fn_mask]
+    X_fp = X_test[fp_mask]
+    
+    print("\n🔍 ERROR ANALYSIS (For Report):")
+    print("-" * 50)
+    print(f"Total False Negatives (Missed Churners): {len(X_fn)}")
+    if len(X_fn) > 0:
+        print(f"  → Average Recency of missed churners: {X_fn['recency'].mean():.1f} days")
+        print(f"  → Average Frequency of missed churners: {X_fn['frequency'].mean():.1f} orders")
+    
+    print(f"\nTotal False Positives (Safe users incorrectly flagged): {len(X_fp)}")
+    if len(X_fp) > 0:
+        print(f"  → Average Recency of False Positives: {X_fp['recency'].mean():.1f} days")
+        print(f"  → Average Frequency of False Positives: {X_fp['frequency'].mean():.1f} orders")
+    print("-" * 50)
 
 
 # ──────────────────────────────────────────────
@@ -486,6 +523,23 @@ def run_churn_pipeline(customer_df: pd.DataFrame) -> dict:
     print(f"   → Precision: {metrics['precision']:.4f}")
     print(f"   → Recall:    {metrics['recall']:.4f}")
     print(f"   → ROC-AUC:   {metrics['roc_auc']:.4f}")
+    
+    print("\n⚖️  Training Baselines (Ablation Study)...")
+    baseline = LogisticRegression(max_iter=1000, class_weight='balanced')
+    try:
+        baseline.fit(splits["X_train"], splits["y_train"])
+        b_pred = baseline.predict(splits["X_test"])
+        b_acc = accuracy_score(splits["y_test"], b_pred)
+        print(f"   → LogisticRegression Baseline Accuracy: {b_acc:.4f}")
+    except Exception as e:
+        print(f"   → Baseline failed: {e}")
+        
+    dummy = DummyClassifier(strategy="prior")
+    dummy.fit(splits["X_train"], splits["y_train"])
+    d_acc = accuracy_score(splits["y_test"], dummy.predict(splits["X_test"]))
+    print(f"   → Majority Class Baseline Accuracy: {d_acc:.4f}\n")
+    
+    perform_error_analysis(model, splits["X_test"], splits["y_test"])
 
     print("🔮 Generating predictions for all customers...")
     all_features = customer_df[FEATURE_COLS].copy()
